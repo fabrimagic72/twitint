@@ -91,6 +91,7 @@ def usage():
     print "-r, --report                         Report users with matching criteria as spam"
     print "-o <file>, --output <file>           Save logs to log file"
     print "-n, --notweet                        Do not save tweets on log file to prevent encoding issues"
+    print "-u, --userid                         Save only user ID on logfile, creating a direct link to user timeline"
 
     sys.exit()
 
@@ -108,9 +109,10 @@ def main():
     logfile =""
     dologging = False
     notweet = False
+    userid = False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hs:vrc:fbro:n", ["help", "string=", "verbose", "rate", "config", "follow", "block", "report", "output", "notweet"])
+        opts, args = getopt.getopt(sys.argv[1:], "hs:vrc:fbro:nu", ["help", "string=", "verbose", "rate", "config", "follow", "block", "report", "output", "notweet", "userid"])
     except getopt.GetoptError as err:
         print(err) # will print something like "option -a not recognized"
         usage()
@@ -135,6 +137,8 @@ def main():
             configfile = a
         elif o in ("-f", "--follow"):
             follow = True
+        elif o in ("-u", "--userid"):
+            userid = True
         elif o in ("-b", "--block"):
             block = True
         elif o in ("-r", "--report"):
@@ -201,7 +205,7 @@ def main():
     else:
         if verbose:
             print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Authenticated!"
-        if dologging:
+        if dologging and userid == False:
             out_file.write(str(datetime.datetime.utcnow()) + " [*] Authenticated!\n")
 
     while True:
@@ -226,7 +230,7 @@ def main():
         print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] TwitInt Initialized"
         print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Last retrieved tweet id: " + bcolors.OKGREEN + str(LastTweetId)
         print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Last retrieved tweet text: "+ bcolors.OKGREEN + LastTweetText
-    if dologging:
+    if dologging and userid == False:
         out_file.write(str(datetime.datetime.utcnow()) + " [*] TwitInt Initialized\n")
         out_file.close()
 
@@ -274,21 +278,24 @@ def main():
                         print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + bcolors.HEADER + " [*] Found new tweet matching selected criteria: " + bcolors.OKGREEN+ tweet.text)
                         print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Id: " + bcolors.OKGREEN + str(tweet.user.id)
                         print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Screen Name: " + bcolors.OKGREEN + tweet.user.screen_name)
-                    if dologging:
+                    if dologging and userid == False:
                         out_file.write('------------------------------------------------------------------------------------------\n')
-                        if notweet == False:
+                        if notweet == False and userid == False:
                             out_file.write(str(datetime.datetime.utcnow()) + ' [*] ' + tweet.text.encode('utf8') + '\n')
-                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user id: ' + str(tweet.user.id) + '\n')
-                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user screen name: ' + str(tweet.user.screen_name) + '\n')
+                        if userid == False:
+                            out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user id: ' + str(tweet.user.id) + '\n')
+                            out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user screen name: ' + str(tweet.user.screen_name) + '\n')
+                    if dologging and userid:
+                        out_file.write("https://twitter.com/intent/user?user_id=" + str(tweet.user.id) + '\n')
                     if follow:
                         api.create_friendship(id=tweet.user.id)
                         if verbose:
                             print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Just followed User: " + bcolors.OKGREEN + tweet.user.screen_name)
-                        if dologging:
+                        if dologging and userid == False:
                             out_file.write(str(datetime.datetime.utcnow()) + ' [*] Just followed User: ' + str(tweet.user.screen_name) + '\n')
                     if block:
                         api.create.block(id=tweet.user.id)
-                        if dologging:
+                        if dologging and userid == False:
                             out_file.write(str(datetime.datetime.utcnow()) + ' [*] Blocked User: ' + str(tweet.user.screen_name) + '\n')
                         if verbose:
                             print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + ' [*] Blocked User: ' + bcolors.OKGREEN + tweet.user.screen_name)
@@ -296,7 +303,7 @@ def main():
                         api.report_spam(id=tweet.user.id)
                         if verbose:
                             print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + ' [*] Reported spam. User: ' + bcolors.OKGREEN + tweet.user.screen_name)
-                        if dologging:
+                        if dologging and userid == False:
                             out_file.write(str(datetime.datetime.utcnow()) + ' [*] Reported spam. User: ' + str(tweet.user.screen_name) + '\n')
 
             out_file.close()
