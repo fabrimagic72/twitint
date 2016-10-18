@@ -260,7 +260,8 @@ def main():
 
         if public_tweets:
             try:
-                out_file = open(logfile, "a")
+                if dologging:
+                    out_file = open(logfile, "a")
             except:
                 print "[*] Error while opening logfile"
                 sys.exit()
