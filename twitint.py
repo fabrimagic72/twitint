@@ -307,7 +307,8 @@ def main():
                         if dologging and userid == False:
                             out_file.write(str(datetime.datetime.utcnow()) + ' [*] Reported spam. User: ' + str(tweet.user.screen_name) + '\n')
 
-            out_file.close()
+            if dologging:
+                out_file.close()
 
 if __name__ == "__main__":
     main()
