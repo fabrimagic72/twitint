@@ -81,14 +81,16 @@ def usage():
     print bcolors.OKGREEN + "Usage python tweetfab [Options]"
     print
     print "Options:"
-    print "-h, --help           Show help message and exit"
-    print "-v, --verbose        Enable verbose output"
-    print "-s, --string         Specify a search string"
-    print "-r, --rate           Print rate limit status (JSON)"
-    print "-c, --config         Use configuration file"
-    print "-f, --follow         follow users with matching criteria tweets"
-    print "-b, --block          block users with matching criteria tweets"
-    print "-r, --report         report users with matching criteria as spam"
+    print "-h, --help                           Show help message and exit"
+    print "-v, --verbose                        Enable verbose output"
+    print "-s <string>, --string <string        Specify a search string"
+    print "-r, --rate                           Print rate limit status (JSON)"
+    print "-c <file>, --config <file>           Use configuration file"
+    print "-f, --follow                         Follow users with matching criteria tweets"
+    print "-b, --block                          Block users with matching criteria tweets"
+    print "-r, --report                         Report users with matching criteria as spam"
+    print "-o <file>, --output <file>           Save logs to log file"
+    print "-n, --notweet                        Do not save tweets on log file to prevent encoding issues"
 
     sys.exit()
 
@@ -105,9 +107,10 @@ def main():
     block = False
     logfile =""
     dologging = False
+    notweet = False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hs:vrc:fbro:", ["help", "string=", "verbose", "rate", "config", "follow", "block", "report", "output"])
+        opts, args = getopt.getopt(sys.argv[1:], "hs:vrc:fbro:n", ["help", "string=", "verbose", "rate", "config", "follow", "block", "report", "output", "notweet"])
     except getopt.GetoptError as err:
         print(err) # will print something like "option -a not recognized"
         usage()
@@ -123,7 +126,7 @@ def main():
             usage()
             sys.exit()
         elif o in ("-s", "--string"):
-            temp = str(a)
+            temp = unicode(a, 'utf8')
             ricerca = temp.lower()
         elif o in ("-r", "--rate"):
             PrintRateLimit()
@@ -136,6 +139,8 @@ def main():
             block = True
         elif o in ("-r", "--report"):
             report = True
+        elif o in ("-n", "--notweet"):
+            notweet = True
         elif o in ("-o", "--output"):
             logfile = a
             dologging = True
@@ -257,13 +262,12 @@ def main():
                 sys.exit()
 
             listatweet = []
-            testotmp=""
+#            testotmp=""
             for tweet in public_tweets:
+#                testotmp = unicode(tweet.text, 'utf8')
                 listatweet.append(tweet.id)
                 LastTweetId = listatweet[0]
                 LastTweetText = tweet.text.lower()
-#                testotmp = unicodedata.normalize('NFDK', tweet.text).encode('ascii', 'ignore')
-#                testotmp = unicode(tweet.text)
 
                 if int(LastTweetText.find(ricerca)) != -1:
                     if verbose:
@@ -272,10 +276,8 @@ def main():
                         print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Screen Name: " + bcolors.OKGREEN + tweet.user.screen_name)
                     if dologging:
                         out_file.write('------------------------------------------------------------------------------------------\n')
-                        out_file.write(str(datetime.datetime.utcnow()))
-                        out_file.write(' [*] ')
-                        out_file.write(tweet.text.encode('utf8'))
-                        out_file.write('\n')
+                        if notweet == False:
+                            out_file.write(str(datetime.datetime.utcnow()) + ' [*] ' + tweet.text.encode('utf8') + '\n')
                         out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user id: ' + str(tweet.user.id) + '\n')
                         out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user screen name: ' + str(tweet.user.screen_name) + '\n')
                     if follow:
