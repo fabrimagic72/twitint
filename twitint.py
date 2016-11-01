@@ -17,7 +17,7 @@ global configfile
 
 verbose = False
 Config = ConfigParser.ConfigParser()
-version = "0.92b"
+version = "0.93b"
 
 
 class bcolors:
@@ -35,6 +35,7 @@ class configuration:
     consumer_secret = ""
     access_token = ""
     access_token_secret = ""
+
 
 def PrintRateLimit():
     ratelimit_json = ""
@@ -82,18 +83,19 @@ def usage():
     print bcolors.OKGREEN + "Usage python tweetfab [Options]"
     print
     print "Options:"
-    print "-h, --help                           Show help message and exit"
-    print "-v, --verbose                        Enable verbose output"
-    print "-s <string>, --string <string        Specify a search string"
-    print "-r, --rate                           Print rate limit status (JSON)"
-    print "-c <file>, --config <file>           Use configuration file"
-    print "-f, --follow                         Follow users with matching criteria tweets"
-    print "-b, --block                          Block users with matching criteria tweets"
-    print "-r, --report                         Report users with matching criteria as spam"
-    print "-o <file>, --output <file>           Save logs to log file"
-    print "-n, --notweet                        Do not save tweets on log file to prevent encoding issues"
-    print "-u, --userid                         Save only user ID on logfile, creating a direct link to user timeline"
-
+    print "-h, --help                               Show help message and exit"
+    print "-v, --verbose                            Enable verbose output"
+    print "-s <string>, --string <string            Specify a search string"
+    print "-r, --rate                               Print rate limit status (JSON)"
+    print "-c <file>, --config <file>               Use configuration file"
+    print "-f, --follow                             Follow users with matching criteria tweets"
+    print "-b, --block                              Block users with matching criteria tweets"
+    print "-r, --report                             Report users with matching criteria as spam"
+    print "-o <file>, --output <file>               Save logs to log file"
+    print "-n, --notweet                            Do not save tweets on log file to prevent encoding issues"
+    print "-u, --userid                             Save only user ID on logfile, creating a direct link to user timeline"
+    print "-t, --trends                             Retrieve the locations that Twitter has trending topic information for. WOEID (a Yahoo! Where On Earth ID) format"
+    print "-l <woeid>, --list <woeid>               print list of trend topics for a given WOEID"
     sys.exit()
 
 def main():
@@ -112,10 +114,13 @@ def main():
     dologging = False
     notweet = False
     userid = False
+    trends = False
+    list = False
+
 
     try:
         try:
-            opts, args = getopt.getopt(sys.argv[1:], "hs:vrc:fbro:nu", ["help", "string=", "verbose", "rate", "config", "follow", "block", "report", "output", "notweet", "userid"])
+            opts, args = getopt.getopt(sys.argv[1:], "hs:vrc:fbro:nutl:", ["help", "string=", "verbose", "rate", "config", "follow", "block", "report", "output", "notweet", "userid", "trends", "--list"])
         except getopt.GetoptError as err:
             print(err) # will print something like "option -a not recognized"
             usage()
@@ -148,6 +153,11 @@ def main():
                 report = True
             elif o in ("-n", "--notweet"):
                 notweet = True
+            elif o in ("-t", "--trends"):
+                trends = True
+            elif o in ("-l", "--list"):
+                woeid = a
+                list = True
             elif o in ("-o", "--output"):
                 logfile = a
                 dologging = True
@@ -158,12 +168,12 @@ def main():
                     sys.exit()
             else:
                 assert False, "[*] Unhandled option"
-
-        if len(ricerca) == 0 or configfile == "":
-            print
-            print bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] ERROR: Missing mandatory parameter"
-            usage()
-            sys.exit()
+        if not trends and not list:
+            if len(ricerca) == 0 or configfile == "":
+                print
+                print bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] ERROR: Missing mandatory parameter"
+                usage()
+                sys.exit()
 
         if verbose:
             print bcolors.OKBLUE + "[*] Configuration file: " + configfile
@@ -211,6 +221,36 @@ def main():
             if dologging and userid == False:
                 out_file.write(str(datetime.datetime.utcnow()) + " [*] Authenticated!\n")
 
+        if trends:
+            try:
+                location = str(raw_input("Please specify a location name (ENTER for none): "))
+                listlocationjson = api.trends_available()
+                if location == "":
+                    for elemento in listlocationjson:
+                        print bcolors.OKBLUE + '[*] Location Info: ' + bcolors.OKGREEN + elemento['name'] + ' - ' + elemento['country'] + bcolors.OKBLUE + ' - WOEID:' + bcolors.OKGREEN + ' ' + str(elemento['woeid'])
+                else:
+                    for elemento in listlocationjson:
+                        if elemento['name'] == location:
+                            print bcolors.OKBLUE + '[*] Location Info: ' + bcolors.OKGREEN + elemento['name'] + ' - ' + elemento['country'] + bcolors.OKBLUE + ' - WOEID:' + bcolors.OKGREEN + ' ' + str(elemento['woeid'])
+            except tweepy.RateLimitError:
+                PrintRateLimit()
+            print bcolors.OKBLUE + '[*] Number of Total Locations Retrieved : ' + bcolors.OKGREEN + str(len(listlocationjson))
+            sys.exit()
+
+        if list:
+            try:
+                listtrends = api.trends_place(int(woeid))
+                print bcolors.OKBLUE + '[*] List of trend topics retrieved for WOEID ' + str(woeid)
+                listtrendsjson = json.dumps(listtrends[0])
+                listtrendsparsed = json.loads(listtrendsjson)
+
+                for elemento in listtrendsparsed['trends']:
+                    print bcolors.OKBLUE + '[*] ' + bcolors.OKGREEN + elemento['name'] + bcolors.OKBLUE + ' - Tweet Volume: ' + bcolors.OKGREEN + str(elemento['tweet_volume'])
+            except:
+                raise
+
+            sys.exit()
+
         while True:
             try:
                 public_tweets = tweepy.Cursor(api.search, q=ricerca[0]).items(1)
@@ -247,6 +287,7 @@ def main():
 
                     public_tweets = tweepy.Cursor(api.search, q=ricerca[0], since_id=LastTweetId).items(10)
                     break
+
                 except tweepy.RateLimitError:
                     print bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] ERROR: Rate Limit error encountered. Sleeping 15 minutes"
                     PrintRateLimit()
@@ -255,7 +296,7 @@ def main():
                     continue
                 except tweepy.TweepError:
                     print (bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] ERROR: Failed to establish a new connection")
-                    sleep(10)
+                    time.sleep(10)
                     continue
 
             if public_tweets:
@@ -283,11 +324,16 @@ def main():
                         if trovato:
                             trovatototal += 1
                             if verbose:
-                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + bcolors.HEADER + " [*] Found new tweet matching selected criteria: " + bcolors.OKGREEN+ tweet.text)
+                                print bcolors.OKBLUE + "*************************************************************************************"
+                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + bcolors.HEADER + " [*] Found new tweet matching selected criteria: ")
+                                print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tweet Text: " + bcolors.OKGREEN + tweet.text
                                 print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Id: " + bcolors.OKGREEN + str(tweet.user.id)
                                 print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Screen Name: " + bcolors.OKGREEN + tweet.user.screen_name)
-#                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tweet GPS Coordinates: " + bcolors.OKGREEN + tweet.coordinates)
-#                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tweet Language: " + bcolors.OKGREEN + tweet.lang)
+                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Name: " + bcolors.OKGREEN + tweet.user.name)
+                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Followers : " + bcolors.OKGREEN + str(tweet.user.followers_count))
+                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tweet Created At : " + bcolors.OKGREEN + str(tweet.created_at))
+                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Retweet Count : " + bcolors.OKGREEN + str(tweet.retweet_count))
+                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Geo Enabled : " + bcolors.OKGREEN + str(tweet.user.geo_enabled))
                             if dologging and userid == False:
                                 out_file.write('------------------------------------------------------------------------------------------\n')
                                 if notweet == False and userid == False:
@@ -295,6 +341,10 @@ def main():
                                 if userid == False:
                                     out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user id: ' + str(tweet.user.id) + '\n')
                                     out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user screen name: ' + str(tweet.user.screen_name) + '\n')
+                                    out_file.write(str(datetime.datetime.utcnow()) + ' [*] Followers : ' + bcolors.OKGREEN + str(tweet.user.followers_count) + '\n')
+                                    out_file.write(str(datetime.datetime.utcnow()) + ' [*] Tweet Created At : ' + bcolors.OKGREEN + str(tweet.created_at) + '\n')
+                                    out_file.write(str(datetime.datetime.utcnow()) + ' [*] Retweet Count : ' + bcolors.OKGREEN + str(tweet.retweet_count) + '\n')
+
                             if dologging and userid:
                                 out_file.write("https://twitter.com/intent/user?user_id=" + str(tweet.user.id) + '\n')
                             if follow:
