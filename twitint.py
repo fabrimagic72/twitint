@@ -6,6 +6,7 @@ import datetime
 import ConfigParser
 import json
 import unicodedata
+import requests
 
 global ricerca
 global TweetId
@@ -14,6 +15,8 @@ global LastTweetId
 global verbose
 global Config
 global configfile
+global location
+
 
 verbose = False
 Config = ConfigParser.ConfigParser()
@@ -35,6 +38,7 @@ class configuration:
     consumer_secret = ""
     access_token = ""
     access_token_secret = ""
+    translateapikey = ""
 
 
 def PrintRateLimit():
@@ -95,7 +99,8 @@ def usage():
     print "-n, --notweet                            Do not save tweets on log file to prevent encoding issues"
     print "-u, --userid                             Save only user ID on logfile, creating a direct link to user timeline"
     print "-t, --trends                             Retrieve the locations that Twitter has trending topic information for. WOEID (a Yahoo! Where On Earth ID) format"
-    print "-l <woeid>, --list <woeid>               print list of trend topics for a given WOEID"
+    print "-l <location>, --list <location>         print list of trend topics for a given location"
+    print "-y <dest lang>, --yandex <dest lang>     Automatically translate tweet text into <dest lang>"
     sys.exit()
 
 def main():
@@ -116,11 +121,13 @@ def main():
     userid = False
     trends = False
     list = False
+    yandex = False
+    destlang = ""
 
 
     try:
         try:
-            opts, args = getopt.getopt(sys.argv[1:], "hs:vrc:fbro:nutl:", ["help", "string=", "verbose", "rate", "config", "follow", "block", "report", "output", "notweet", "userid", "trends", "--list"])
+            opts, args = getopt.getopt(sys.argv[1:], "hs:vrc:fbro:nutl:y:", ["help", "string=", "verbose", "rate", "config=", "follow", "block", "report", "output=", "notweet", "userid", "trends", "--list=", "yandex="])
         except getopt.GetoptError as err:
             print(err) # will print something like "option -a not recognized"
             usage()
@@ -155,8 +162,11 @@ def main():
                 notweet = True
             elif o in ("-t", "--trends"):
                 trends = True
+            elif o in ("-y", "--yandex"):
+                yandex = True
+                destlang = a
             elif o in ("-l", "--list"):
-                woeid = a
+                location = a
                 list = True
             elif o in ("-o", "--output"):
                 logfile = a
@@ -184,6 +194,8 @@ def main():
             configuration.access_token = Config.get('access', "access_token")
             configuration.consumer_key = Config.get('access', "consumer_key")
             configuration.consumer_secret = Config.get('access', "consumer_secret")
+            configuration.translateapikey = Config.get('translate', 'key')
+
         except:
             print bcolors.FAIL + str(datetime.datetime.utcnow()) + "[*] Error while reading config file"
             sys.exit()
@@ -204,6 +216,8 @@ def main():
             print bcolors.OKBLUE + "[*] Access Token = " + bcolors.OKGREEN + configuration.access_token
             print bcolors.OKBLUE + "[*] Access Token Secret = " + bcolors.OKGREEN + configuration.access_token_secret
             print""
+            if yandex:
+                    print bcolors.HEADER + '*** Translation Powered by Yandex.Translate -  http://translate.yandex.com ***'
             print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Authenticating..."
 
 
@@ -238,9 +252,23 @@ def main():
             sys.exit()
 
         if list:
+            woeid = ""
             try:
-                listtrends = api.trends_place(int(woeid))
-                print bcolors.OKBLUE + '[*] List of trend topics retrieved for WOEID ' + str(woeid)
+                listlocationjson = api.trends_available()
+                if str(location) != "":
+                    for elemento in listlocationjson:
+                        if elemento['name'] == str(location):
+                            woeid = str(elemento['woeid'])
+                    if str(woeid) == "":
+                        print bcolors.FAIL + "[*] Failed to retrieve trend topics for " + location
+                        sys.exit()
+                else:
+                    print bcolors.FAIL + "[*] Missing location. Check parameters"
+                    sys.exit()
+
+                print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + bcolors.OKGREEN + " [*] WOEID for " + location + " is: " + str(woeid)
+                listtrends = api.trends_place(woeid)
+                print bcolors.OKBLUE + '[*] List of trend topics retrieved for  ' + str(location)
                 listtrendsjson = json.dumps(listtrends[0])
                 listtrendsparsed = json.loads(listtrendsjson)
 
@@ -324,9 +352,24 @@ def main():
                         if trovato:
                             trovatototal += 1
                             if verbose:
+                                #print tweet
                                 print bcolors.OKBLUE + "*************************************************************************************"
                                 print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + bcolors.HEADER + " [*] Found new tweet matching selected criteria: ")
                                 print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tweet Text: " + bcolors.OKGREEN + tweet.text
+                                if yandex:
+                                    yandexurl = 'https://translate.yandex.net/api/v1.5/tr.json/detect?key=' + str(configuration.translateapikey) + '&text=' + tweet.text.encode('utf8')
+                                    detectedlanguagejson = requests.get(yandexurl)
+#                                    detectedlanguagejson = requests.get('https://translate.yandex.net/api/v1.5/tr.json/detect?key=' + str(configuration.translateapikey) + '&text="' + str(tweet.text) + '"')
+                                    detectedlanguageparsed = json.loads(str(detectedlanguagejson.text))
+                                    print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Detected Language: " + bcolors.OKGREEN + str(detectedlanguageparsed['lang'])
+                                    yandextransurl = 'https://translate.yandex.net/api/v1.5/tr.json/translate?key=' + str(configuration.translateapikey) + '&text=' + tweet.text.encode('utf8') + '&lang=' + str(destlang)
+#                                    print yandextransurl
+                                    translatedtweetjson = requests.get(yandextransurl)
+                                    translatedtweetparsed = json.loads(translatedtweetjson.text)
+                                    if str(translatedtweetparsed['code']) == "200":
+                                        print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Translated Tweet: " + bcolors.OKGREEN + str(translatedtweetparsed['text'])[3:-2]
+                                    else:
+                                        print bcolors.WARNING + str(datetime.datetime.utcnow()) + " [*] Unable to translate this tweet - Error Code: " + str(translatedtweetparsed['code'])
                                 print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Id: " + bcolors.OKGREEN + str(tweet.user.id)
                                 print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Screen Name: " + bcolors.OKGREEN + tweet.user.screen_name)
                                 print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Name: " + bcolors.OKGREEN + tweet.user.name)
@@ -334,16 +377,39 @@ def main():
                                 print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tweet Created At : " + bcolors.OKGREEN + str(tweet.created_at))
                                 print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Retweet Count : " + bcolors.OKGREEN + str(tweet.retweet_count))
                                 print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Geo Enabled : " + bcolors.OKGREEN + str(tweet.user.geo_enabled))
-                            if dologging and userid == False:
-                                out_file.write('------------------------------------------------------------------------------------------\n')
-                                if notweet == False and userid == False:
-                                    out_file.write(str(datetime.datetime.utcnow()) + ' [*] ' + tweet.text.encode('utf8') + '\n')
-                                if userid == False:
-                                    out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user id: ' + str(tweet.user.id) + '\n')
-                                    out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user screen name: ' + str(tweet.user.screen_name) + '\n')
-                                    out_file.write(str(datetime.datetime.utcnow()) + ' [*] Followers : ' + bcolors.OKGREEN + str(tweet.user.followers_count) + '\n')
-                                    out_file.write(str(datetime.datetime.utcnow()) + ' [*] Tweet Created At : ' + bcolors.OKGREEN + str(tweet.created_at) + '\n')
-                                    out_file.write(str(datetime.datetime.utcnow()) + ' [*] Retweet Count : ' + bcolors.OKGREEN + str(tweet.retweet_count) + '\n')
+                                try:
+                                    print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Source : " + bcolors.OKGREEN + str(tweet.source))
+                                except:
+                                    print bcolors.WARNING + str(datetime.datetime.utcnow()) + " [*] Could not retrieve Source"
+                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] GPS Coords: " + bcolors.OKGREEN + str(tweet.coordinates))
+                                userlocation = tweet.user.location.encode('utf8')
+                                try:
+                                    print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Location: " + bcolors.OKGREEN + str(userlocation))
+                                except:
+                                    print bcolors.WARNING + str(datetime.datetime.utcnow()) + " [*] Could not retrieve User Location"
+                                    continue
+
+                                if dologging and userid == False:
+                                    out_file.write('------------------------------------------------------------------------------------------\n')
+                                    if notweet == False and userid == False:
+                                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] ' + tweet.text.encode('utf8') + '\n')
+                                        if yandex and str(translatedtweetparsed['code']) == "200":
+                                            out_file.write(str(datetime.datetime.utcnow()) + ' [*] ' + str(translatedtweetparsed['text']))
+
+                                    if userid == False:
+                                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user id: ' + str(tweet.user.id) + '\n')
+                                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user screen name: ' + str(tweet.user.screen_name) + '\n')
+                                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] Followers: ' + bcolors.OKGREEN + str(tweet.user.followers_count) + '\n')
+                                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] Tweet Created At: ' + bcolors.OKGREEN + str(tweet.created_at) + '\n')
+                                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] Retweet Count: ' + bcolors.OKGREEN + str(tweet.retweet_count) + '\n')
+                                        try:
+                                            out_file.write(str(datetime.datetime.utcnow()) + ' [*] Source: ' + bcolors.OKGREEN + str(tweet.source) + '\n')
+                                        except:
+                                            continue
+                                        try:
+                                            out_file.write(str(datetime.datetime.utcnow()) + ' [*] User Location: ' + bcolors.OKGREEN + str(userlocation) + '\n')
+                                        except:
+                                            continue
 
                             if dologging and userid:
                                 out_file.write("https://twitter.com/intent/user?user_id=" + str(tweet.user.id) + '\n')
@@ -367,6 +433,9 @@ def main():
                                     out_file.write(str(datetime.datetime.utcnow()) + ' [*] Reported spam. User: ' + str(tweet.user.screen_name) + '\n')
                     if dologging:
                         out_file.close()
+                except KeyError:
+                        print bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] Key Error Occurred"
+                        continue
                 except:
                     print (bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] ERROR: Failed to establish a new connection.")
                     print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + bcolors.OKGREEN + " [*] Sleeping 10 seconds and then i will retry.")
