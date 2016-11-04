@@ -16,6 +16,9 @@ global verbose
 global Config
 global configfile
 global location
+global keyword
+global paroleprofilo
+global paroleurl
 
 
 verbose = False
@@ -101,6 +104,7 @@ def usage():
     print "-t, --trends                             Retrieve the locations that Twitter has trending topic information for. WOEID (a Yahoo! Where On Earth ID) format"
     print "-l <location>, --list <location>         print list of trend topics for a given location"
     print "-y <dest lang>, --yandex <dest lang>     Automatically translate tweet text into <dest lang>"
+    print "-d, --deep                               Perform deep imapge analisys, categorization and tagging"
     sys.exit()
 
 def main():
@@ -123,11 +127,15 @@ def main():
     list = False
     yandex = False
     destlang = ""
+    deep = False
+    listakeyword = []
+    paroleprofilo = []
+    paroleurl = []
 
 
     try:
         try:
-            opts, args = getopt.getopt(sys.argv[1:], "hs:vrc:fbro:nutl:y:", ["help", "string=", "verbose", "rate", "config=", "follow", "block", "report", "output=", "notweet", "userid", "trends", "--list=", "yandex="])
+            opts, args = getopt.getopt(sys.argv[1:], "hs:vrc:fbro:nutl:y:d", ["help", "string=", "verbose", "rate", "config=", "follow", "block", "report", "output=", "notweet", "userid", "trends", "--list=", "yandex=", "deep"])
         except getopt.GetoptError as err:
             print(err) # will print something like "option -a not recognized"
             usage()
@@ -150,6 +158,8 @@ def main():
                 sys.exit()
             elif o in ("-c", "--config"):
                 configfile = a
+            elif o in ("-d", "--deep"):
+                deep = True
             elif o in ("-f", "--follow"):
                 follow = True
             elif o in ("-u", "--userid"):
@@ -195,6 +205,8 @@ def main():
             configuration.consumer_key = Config.get('access', "consumer_key")
             configuration.consumer_secret = Config.get('access', "consumer_secret")
             configuration.translateapikey = Config.get('translate', 'key')
+            configuration.imaggakey = Config.get('imagga', 'key')
+            configuration.imaggasecred = Config.get('imagga', 'secret')
 
         except:
             print bcolors.FAIL + str(datetime.datetime.utcnow()) + "[*] Error while reading config file"
@@ -218,6 +230,13 @@ def main():
             print""
             if yandex:
                     print bcolors.HEADER + '*** Translation Powered by Yandex.Translate -  http://translate.yandex.com ***'
+            if deep:
+                print bcolors.HEADER + '*** Image Categorization and tagging Powered by Imagga - http://www.imagga.com ***'
+                w = raw_input("Insert keyword to look for: ")
+                while w != "":
+                    insert = w.lower()
+                    listakeyword.append(w)
+                    w = raw_input("Insert keyword to look for: ")
             print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Authenticating..."
 
 
@@ -352,18 +371,16 @@ def main():
                         if trovato:
                             trovatototal += 1
                             if verbose:
-                                #print tweet
+
                                 print bcolors.OKBLUE + "*************************************************************************************"
                                 print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + bcolors.HEADER + " [*] Found new tweet matching selected criteria: ")
                                 print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tweet Text: " + bcolors.OKGREEN + tweet.text
                                 if yandex:
                                     yandexurl = 'https://translate.yandex.net/api/v1.5/tr.json/detect?key=' + str(configuration.translateapikey) + '&text=' + tweet.text.encode('utf8')
                                     detectedlanguagejson = requests.get(yandexurl)
-#                                    detectedlanguagejson = requests.get('https://translate.yandex.net/api/v1.5/tr.json/detect?key=' + str(configuration.translateapikey) + '&text="' + str(tweet.text) + '"')
                                     detectedlanguageparsed = json.loads(str(detectedlanguagejson.text))
                                     print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Detected Language: " + bcolors.OKGREEN + str(detectedlanguageparsed['lang'])
                                     yandextransurl = 'https://translate.yandex.net/api/v1.5/tr.json/translate?key=' + str(configuration.translateapikey) + '&text=' + tweet.text.encode('utf8') + '&lang=' + str(destlang)
-#                                    print yandextransurl
                                     translatedtweetjson = requests.get(yandextransurl)
                                     translatedtweetparsed = json.loads(translatedtweetjson.text)
                                     if str(translatedtweetparsed['code']) == "200":
@@ -377,6 +394,39 @@ def main():
                                 print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tweet Created At : " + bcolors.OKGREEN + str(tweet.created_at))
                                 print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Retweet Count : " + bcolors.OKGREEN + str(tweet.retweet_count))
                                 print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Geo Enabled : " + bcolors.OKGREEN + str(tweet.user.geo_enabled))
+                                if deep:
+                                    imaggatagjson = requests.get('https://api.imagga.com/v1/tagging?url=' + str(tweet.user.profile_background_image_url), auth=(configuration.imaggakey, configuration.imaggasecred))
+                                    imaggatagparsed = json.loads(imaggatagjson.text)
+
+                                    for elencotag in imaggatagparsed['results']:
+                                        for tags in elencotag['tags']:
+                                            key = tags['tag']
+                                            if listakeyword.count(key.lower()) > 0:
+                                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tag: " + bcolors.OKGREEN +  key + bcolors.OKBLUE + " found in " + str(tweet.user.profile_background_image_url))
+                                                paroleprofilo.append(key)
+
+                                if len(tweet.entities['urls']) > 0:
+                                    urljson = json.dumps(str(tweet.entities['urls'][0]))
+                                    urlparsed = str(json.loads(urljson))
+                                    strsearch = "expanded_url"
+                                    urlindex = urlparsed.index(strsearch)
+                                    urlfinestringa = urlparsed.index("', u'display_url")
+                                    expandedurl = urlparsed[(urlindex+17):urlfinestringa]
+                                    if expandedurl[:-4] == ".jpg" or expandedurl[:-4] == ".gif" or expandedurl[:-4] == ".png" or expandedurl[:-5] == ".jpeg":
+                                        isimage = True
+                                    else:
+                                        isimage = False
+
+                                    print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Expanded Media URL:" + bcolors.OKGREEN + expandedurl)
+                                    if deep and isimage:
+                                        imaggatagjson = requests.get('https://api.imagga.com/v1/tagging?url=' + expandedurl, auth=(configuration.imaggakey, configuration.imaggasecred))
+                                        imaggatagparsed = json.loads(imaggatagjson.text)
+                                        for elencotag in imaggatagparsed['results']:
+                                            for tags in elencotag['tags']:
+                                                key = tags['tag']
+                                                if listakeyword.count(key.lower()) > 0:
+                                                    print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tag: " + bcolors.OKGREEN +  key + bcolors.OKBLUE + " found in " + expandedurl)
+                                                    paroleurl.append(key)
                                 try:
                                     print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Source : " + bcolors.OKGREEN + str(tweet.source))
                                 except:
@@ -439,8 +489,8 @@ def main():
                 except:
                     print (bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] ERROR: Failed to establish a new connection.")
                     print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + bcolors.OKGREEN + " [*] Sleeping 10 seconds and then i will retry.")
-                    time.sleep(10)
-                    continue
+                    #time.sleep(10)
+                    raise
                 else:
                     if trovatototal == 0:
                         print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + bcolors.WARNING + " [*] No New tweets matching selected criteria")
