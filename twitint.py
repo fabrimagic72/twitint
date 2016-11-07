@@ -7,12 +7,14 @@ import ConfigParser
 import json
 import unicodedata
 import requests
+import logging
+import textrazor
+
 
 global ricerca
 global TweetId
 global TweetText
 global LastTweetId
-global verbose
 global Config
 global configfile
 global location
@@ -21,9 +23,8 @@ global paroleprofilo
 global paroleurl
 
 
-verbose = False
 Config = ConfigParser.ConfigParser()
-version = "0.93b"
+version = "0.94b"
 
 
 class bcolors:
@@ -42,19 +43,21 @@ class configuration:
     access_token = ""
     access_token_secret = ""
     translateapikey = ""
+    imaggakey = ""
+    imaggasecret = ""
 
 
 def PrintRateLimit():
     ratelimit_json = ""
     parsed_ratelimit = ""
 
-    if verbose:
-        print bcolors.OKBLUE + "[*] Consumer Key = " + bcolors.OKGREEN + configuration.consumer_key
-        print bcolors.OKBLUE + "[*] Consumer Secret = " + bcolors.OKGREEN + configuration.consumer_secret
-        print bcolors.OKBLUE + "[*] Access Token = " + bcolors.OKGREEN + configuration.access_token
-        print bcolors.OKBLUE + "[*] Access Token Secret = " + bcolors.OKGREEN + configuration.access_token_secret
-        print""
-        print str(datetime.datetime.utcnow()) + " [*] Authenticating..."
+
+    print bcolors.OKBLUE + "[*] Consumer Key = " + bcolors.OKGREEN + configuration.consumer_key
+    print bcolors.OKBLUE + "[*] Consumer Secret = " + bcolors.OKGREEN + configuration.consumer_secret
+    print bcolors.OKBLUE + "[*] Access Token = " + bcolors.OKGREEN + configuration.access_token
+    print bcolors.OKBLUE + "[*] Access Token Secret = " + bcolors.OKGREEN + configuration.access_token_secret
+    print""
+    print str(datetime.datetime.utcnow()) + " [*] Authenticating..."
     auth = tweepy.OAuthHandler(configuration.consumer_key, configuration.consumer_secret)
     auth.set_access_token(configuration.access_token, configuration.access_token_secret)
 
@@ -63,8 +66,7 @@ def PrintRateLimit():
     except:
         print bcolors.WARNING + str(datetime.datetime.utcnow()) +  " [*] Error while authenticating. Check API keys"
     else:
-        if verbose:
-            print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Authenticated!"
+        print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Authenticated!"
     print bcolors.OKBLUE
     ratelimit_json = api.rate_limit_status()
     parsed_ratelimit = json.loads(ratelimit_json)
@@ -91,7 +93,6 @@ def usage():
     print
     print "Options:"
     print "-h, --help                               Show help message and exit"
-    print "-v, --verbose                            Enable verbose output"
     print "-s <string>, --string <string            Specify a search string"
     print "-r, --rate                               Print rate limit status (JSON)"
     print "-c <file>, --config <file>               Use configuration file"
@@ -99,8 +100,6 @@ def usage():
     print "-b, --block                              Block users with matching criteria tweets"
     print "-r, --report                             Report users with matching criteria as spam"
     print "-o <file>, --output <file>               Save logs to log file"
-    print "-n, --notweet                            Do not save tweets on log file to prevent encoding issues"
-    print "-u, --userid                             Save only user ID on logfile, creating a direct link to user timeline"
     print "-t, --trends                             Retrieve the locations that Twitter has trending topic information for. WOEID (a Yahoo! Where On Earth ID) format"
     print "-l <location>, --list <location>         print list of trend topics for a given location"
     print "-y <dest lang>, --yandex <dest lang>     Automatically translate tweet text into <dest lang>"
@@ -114,15 +113,10 @@ def main():
     LastTweetId=0
     LastTweetText=""
     ricerca = []
-    verbose = False
     configfile = ""
     follow = False
     report = False
     block = False
-    logfile =""
-    dologging = False
-    notweet = False
-    userid = False
     trends = False
     list = False
     yandex = False
@@ -131,23 +125,22 @@ def main():
     listakeyword = []
     paroleprofilo = []
     paroleurl = []
+    dologging = False
 
 
     try:
         try:
-            opts, args = getopt.getopt(sys.argv[1:], "hs:vrc:fbro:nutl:y:d", ["help", "string=", "verbose", "rate", "config=", "follow", "block", "report", "output=", "notweet", "userid", "trends", "--list=", "yandex=", "deep"])
+            opts, args = getopt.getopt(sys.argv[1:], "hs:rc:fbro:tl:y:d", ["help", "string=", "rate", "config=", "follow", "block", "report", "output=", "trends", "--list=", "yandex=", "deep"])
         except getopt.GetoptError as err:
             print(err) # will print something like "option -a not recognized"
             usage()
             sys.exit(2)
         output = None
-        verbose = False
+
         if len(opts) == 0:
             usage()
         for o, a in opts:
-            if o == "-v":
-                verbose = True
-            elif o in ("-h", "--help"):
+            if o in ("-h", "--help"):
                 usage()
                 sys.exit()
             elif o in ("-s", "--string"):
@@ -162,14 +155,10 @@ def main():
                 deep = True
             elif o in ("-f", "--follow"):
                 follow = True
-            elif o in ("-u", "--userid"):
-                userid = True
             elif o in ("-b", "--block"):
                 block = True
             elif o in ("-r", "--report"):
                 report = True
-            elif o in ("-n", "--notweet"):
-                notweet = True
             elif o in ("-t", "--trends"):
                 trends = True
             elif o in ("-y", "--yandex"):
@@ -179,24 +168,26 @@ def main():
                 location = a
                 list = True
             elif o in ("-o", "--output"):
-                logfile = a
                 dologging = True
-                try:
-                    out_file = open(logfile, "a")
-                except:
-                    print "[*] Error while creating output file"
-                    sys.exit()
+                logfile = a
             else:
                 assert False, "[*] Unhandled option"
+        if dologging:
+            logging.basicConfig(filename=logfile, level=logging.WARNING, format='%(asctime)s %(levelname)s %(message)s',
+                                datefmt='%d/%m/%Y %I:%M:%S %p')
+            logging.warning(bcolors.HEADER + "[*] Configuration file: " + configfile)
+            logging.getLogger().addHandler(logging.StreamHandler())
+        else:
+            logging.basicConfig(level=logging.WARNING, format='%(asctime)s %(levelname)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
+
         if not trends and not list:
-            if len(ricerca) == 0 or configfile == "":
+            if len(ricerca) == 0:
                 print
-                print bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] ERROR: Missing mandatory parameter"
+                logging.critical(bcolors.FAIL + " [*] ERROR: Missing mandatory parameter")
                 usage()
                 sys.exit()
 
-        if verbose:
-            print bcolors.OKBLUE + "[*] Configuration file: " + configfile
+
 
         try:
             Config.read(configfile)
@@ -207,11 +198,13 @@ def main():
             configuration.translateapikey = Config.get('translate', 'key')
             configuration.imaggakey = Config.get('imagga', 'key')
             configuration.imaggasecred = Config.get('imagga', 'secret')
+            textrazor.api_key = Config.get('textrazor', 'key')
 
         except:
             print bcolors.FAIL + str(datetime.datetime.utcnow()) + "[*] Error while reading config file"
             sys.exit()
 
+        print bcolors.OKBLUE
         print ("___________       .__  __  .___        __    ")
         print ("\__    ___/_  _  _|__|/  |_|   | _____/  |_  ")
         print ("  |    |  \ \/ \/ /  \   __\   |/    \   __\ ")
@@ -219,25 +212,29 @@ def main():
         print ("  |____|    \/\_/ |__||__| |___|___|  /__|   ")
         print ("                                    \/       ")
         print
-        print bcolors.HEADER + "TwitInt v" + version +"- by Fabrizio 'Fabrimagic' Monaco"
-        print ""
+        print "TwitInt v" + version +"- by Fabrizio 'Fabrimagic' Monaco"
+        print
 
-        if verbose:
-            print bcolors.OKBLUE + "[*] Consumer Key = " + bcolors.OKGREEN + configuration.consumer_key
-            print bcolors.OKBLUE + "[*] Consumer Secret = " + bcolors.OKGREEN + configuration.consumer_secret
-            print bcolors.OKBLUE + "[*] Access Token = " + bcolors.OKGREEN + configuration.access_token
-            print bcolors.OKBLUE + "[*] Access Token Secret = " + bcolors.OKGREEN + configuration.access_token_secret
-            print""
-            if yandex:
-                    print bcolors.HEADER + '*** Translation Powered by Yandex.Translate -  http://translate.yandex.com ***'
-            if deep:
-                print bcolors.HEADER + '*** Image Categorization and tagging Powered by Imagga - http://www.imagga.com ***'
+
+        logging.warning(bcolors.HEADER + "[*] Consumer Key = " + bcolors.OKGREEN + configuration.consumer_key + bcolors.OKBLUE)
+        logging.warning(bcolors.HEADER + "[*] Consumer Secret = " + bcolors.OKGREEN + configuration.consumer_secret + bcolors.OKBLUE)
+        logging.warning(bcolors.HEADER + "[*] Access Token = " + bcolors.OKGREEN + configuration.access_token + bcolors.OKBLUE)
+        logging.warning(bcolors.HEADER + "[*] Access Token Secret = " + bcolors.OKGREEN + configuration.access_token_secret + bcolors.OKBLUE)
+
+        print
+        if yandex:
+                print bcolors.BOLD + '*** Translation Powered by Yandex.Translate -  http://translate.yandex.com ***' + bcolors.ENDC + bcolors.OKBLUE
+                print
+        if deep:
+            print bcolors.BOLD + '*** Image Categorization and tagging Powered by Imagga - http://www.imagga.com ***' + bcolors.ENDC + bcolors.OKBLUE
+            print
+            print "##### DEEP ANALYSIS REQUIRES MANUAL INPUT #####"
+            w = raw_input("Insert keyword to look for: ")
+            while w != "":
+                insert = w.lower()
+                listakeyword.append(insert)
                 w = raw_input("Insert keyword to look for: ")
-                while w != "":
-                    insert = w.lower()
-                    listakeyword.append(w)
-                    w = raw_input("Insert keyword to look for: ")
-            print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Authenticating..."
+        logging.warning(bcolors.HEADER + " [*] Authenticating..." + bcolors.OKBLUE)
 
 
         auth = tweepy.OAuthHandler(configuration.consumer_key, configuration.consumer_secret)
@@ -247,15 +244,14 @@ def main():
         try:
             api = tweepy.API(auth)
         except:
-            print bcolors.WARNING + str(datetime.datetime.utcnow()) + " [*] Error while authenticating. Check API keys"
+            logging.critical(bcolors.FAIL + " [*] Error while authenticating. Check API keys" + bcolors.OKBLUE)
         else:
-            if verbose:
-                print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Authenticated!"
-            if dologging and userid == False:
-                out_file.write(str(datetime.datetime.utcnow()) + " [*] Authenticated!\n")
+            logging.warning(bcolors.HEADER + " [*] Authenticated!" + bcolors.OKBLUE)
 
         if trends:
             try:
+                print
+                print "##### MANUAL INPUT REQUIRED #####"
                 location = str(raw_input("Please specify a location name (ENTER for none): "))
                 listlocationjson = api.trends_available()
                 if location == "":
@@ -303,57 +299,44 @@ def main():
                 public_tweets = tweepy.Cursor(api.search, q=ricerca[0]).items(1)
                 break
             except tweepy.RateLimitError:
-                print bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] WARNING: Rate Limit error encountered. Sleeping 15 minutes"
+                logginf.critical(" [*] WARNING: Rate Limit error encountered. Sleeping 15 minutes")
                 PrintRateLimit()
                 time.sleep(61*15)
-                print bcolors.WARNING + str(datetime.datetime.utcnow()) + " [*] Retrying..."
+                print logging.warning(bcolors.HEADER + " [*] Retrying..." + bcolors.OKBLUE)
                 continue
 
         for tweet in public_tweets:
             LastTweetText = tweet.text
             LastTweetId = tweet.id
 
-        if verbose:
-            print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Twitint is being initialized. This will take a minute"
-        if dologging and userid == False:
-            out_file.write(str(datetime.datetime.utcnow()) + " [*] TwitInt Initialized\n")
-            out_file.close()
+        logging.warning(bcolors.HEADER + "[*] Twitint is being initialized. This will take a minute" + bcolors.OKBLUE)
 
         while True:
             trovato = False
             trovatototal = 0
-            if verbose:
-                print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Waiting 60 seconds in order to avoid Twitter API Rate Limit"
+            logging.warning(bcolors.HEADER + " [*] Waiting 60 seconds in order to avoid Twitter API Rate Limit" + bcolors.OKBLUE)
             time.sleep(60)
 
 
             while True:
                 try:
-                    if verbose:
-                        print str(datetime.datetime.utcnow()) + " [*] Trying to get new tweets"
+                    logging.warning(bcolors.HEADER + " [*] Trying to get new tweets" + bcolors.OKBLUE)
 
                     public_tweets = tweepy.Cursor(api.search, q=ricerca[0], since_id=LastTweetId).items(10)
                     break
 
                 except tweepy.RateLimitError:
-                    print bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] ERROR: Rate Limit error encountered. Sleeping 15 minutes"
+                    logging.critical(bcolors.FAIL + " [*] ERROR: Rate Limit error encountered. Sleeping 15 minutes" + bcolors.OKBLUE)
                     PrintRateLimit()
                     time.sleep(61*15)
-                    print bcolors.WARNING + str(datetime.datetime.utcnow()) + " [*] Retrying..."
+                    logging.warning(bcolors.HEADER + " [*] Retrying..." + bcolors.OKBLUE)
                     continue
                 except tweepy.TweepError:
-                    print (bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] ERROR: Failed to establish a new connection")
+                    print (bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] ERROR: Failed to establish a new connection" + bcolors.OKBLUE)
                     time.sleep(10)
                     continue
 
             if public_tweets:
-                try:
-                    if dologging:
-                        out_file = open(logfile, "a")
-                except:
-                    print "[*] Error while opening logfile"
-                    sys.exit()
-
                 listatweet = []
                 try:
                     for tweet in public_tweets:
@@ -370,134 +353,125 @@ def main():
 
                         if trovato:
                             trovatototal += 1
-                            if verbose:
+                            logging.warning(bcolors.HEADER + "*************************************************************************************" + bcolors.OKBLUE)
+                            logging.warning(bcolors.HEADER + " [*] Found new tweet matching selected criteria: " + bcolors.OKBLUE)
+                            logging.warning(bcolors.HEADER + " [*] Tweet Text: " + bcolors.OKGREEN + tweet.text + bcolors.OKBLUE)
+                            if yandex:
+                                yandexurl = 'https://translate.yandex.net/api/v1.5/tr.json/detect?key=' + str(configuration.translateapikey) + '&text=' + tweet.text.encode('utf8')
+                                detectedlanguagejson = requests.get(yandexurl)
+                                detectedlanguageparsed = json.loads(str(detectedlanguagejson.text))
+                                logging.warning(bcolors.HEADER + " [*] Detected Language: " + bcolors.OKGREEN + str(detectedlanguageparsed['lang'] + bcolors.OKBLUE))
+                                yandextransurl = 'https://translate.yandex.net/api/v1.5/tr.json/translate?key=' + str(configuration.translateapikey) + '&text=' + tweet.text.encode('utf8') + '&lang=' + str(destlang)
+                                translatedtweetjson = requests.get(yandextransurl)
+                                translatedtweetparsed = json.loads(translatedtweetjson.text)
+                                if str(translatedtweetparsed['code']) == "200":
+                                    logging.warning(bcolors.HEADER + " [*] Translated Tweet: " + bcolors.OKGREEN + str(translatedtweetparsed['text'])[3:-2] + bcolors.OKBLUE)
+                                else:
+                                    logging.critical(bcolors.FAIL + " [*] Unable to translate this tweet - Error Code: " + str(translatedtweetparsed['code']) + bcolors.OKBLUE)
+                            logging.warning(bcolors.HEADER + " [*] User Id: " + bcolors.OKGREEN + str(tweet.user.id) + bcolors.OKBLUE)
+                            logging.warning(bcolors.HEADER + " [*] User Screen Name: " + bcolors.OKGREEN + tweet.user.screen_name + bcolors.OKBLUE)
+                            logging.warning(bcolors.HEADER + " [*] User Name: " + bcolors.OKGREEN + tweet.user.name + bcolors.OKBLUE)
+                            logging.warning(bcolors.HEADER + " [*] Followers : " + bcolors.OKGREEN + str(tweet.user.followers_count) + bcolors.OKBLUE)
+                            logging.warning(bcolors.HEADER + " [*] Tweet Created At : " + bcolors.OKGREEN + str(tweet.created_at) + bcolors.OKBLUE)
+                            logging.warning(bcolors.HEADER + " [*] Retweet Count : " + bcolors.OKGREEN + str(tweet.retweet_count) + bcolors.OKBLUE)
+                            logging.warning(bcolors.HEADER + " [*] Geo Enabled : " + bcolors.OKGREEN + str(tweet.user.geo_enabled) + bcolors.OKBLUE)
+                            try:
+                                logging.warning(bcolors.HEADER + " [*] Source : " + bcolors.OKGREEN + str(
+                                    tweet.source) + bcolors.OKBLUE)
+                            except:
+                                logging.warning(" [*] Could not retrieve Source")
+                            if deep:
+                                imaggatagjson = requests.get('https://api.imagga.com/v1/tagging?url=' + str(tweet.user.profile_background_image_url), auth=(configuration.imaggakey, configuration.imaggasecred))
+                                imaggatagparsed = json.loads(imaggatagjson.text)
 
-                                print bcolors.OKBLUE + "*************************************************************************************"
-                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + bcolors.HEADER + " [*] Found new tweet matching selected criteria: ")
-                                print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tweet Text: " + bcolors.OKGREEN + tweet.text
-                                if yandex:
-                                    yandexurl = 'https://translate.yandex.net/api/v1.5/tr.json/detect?key=' + str(configuration.translateapikey) + '&text=' + tweet.text.encode('utf8')
-                                    detectedlanguagejson = requests.get(yandexurl)
-                                    detectedlanguageparsed = json.loads(str(detectedlanguagejson.text))
-                                    print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Detected Language: " + bcolors.OKGREEN + str(detectedlanguageparsed['lang'])
-                                    yandextransurl = 'https://translate.yandex.net/api/v1.5/tr.json/translate?key=' + str(configuration.translateapikey) + '&text=' + tweet.text.encode('utf8') + '&lang=' + str(destlang)
-                                    translatedtweetjson = requests.get(yandextransurl)
-                                    translatedtweetparsed = json.loads(translatedtweetjson.text)
-                                    if str(translatedtweetparsed['code']) == "200":
-                                        print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Translated Tweet: " + bcolors.OKGREEN + str(translatedtweetparsed['text'])[3:-2]
-                                    else:
-                                        print bcolors.WARNING + str(datetime.datetime.utcnow()) + " [*] Unable to translate this tweet - Error Code: " + str(translatedtweetparsed['code'])
-                                print bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Id: " + bcolors.OKGREEN + str(tweet.user.id)
-                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Screen Name: " + bcolors.OKGREEN + tweet.user.screen_name)
-                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Name: " + bcolors.OKGREEN + tweet.user.name)
-                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Followers : " + bcolors.OKGREEN + str(tweet.user.followers_count))
-                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tweet Created At : " + bcolors.OKGREEN + str(tweet.created_at))
-                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Retweet Count : " + bcolors.OKGREEN + str(tweet.retweet_count))
-                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Geo Enabled : " + bcolors.OKGREEN + str(tweet.user.geo_enabled))
-                                if deep:
-                                    imaggatagjson = requests.get('https://api.imagga.com/v1/tagging?url=' + str(tweet.user.profile_background_image_url), auth=(configuration.imaggakey, configuration.imaggasecred))
+                                logging.warning(" [*] Twitter User Profile Image Analysis in Progress...")
+                                for elencotag in imaggatagparsed['results']:
+                                    for tags in elencotag['tags']:
+                                        key = tags['tag']
+                                        confidence = tags['confidence']
+                                        if confidence > 30:
+                                            logging.warning(bcolors.HEADER + " [*] Profile Image Tag Found: " + bcolors.OKGREEN + key)
+                                            logging.warning(bcolors.HEADER + " [*] Confidence: " + bcolors.OKGREEN + str(confidence))
+ #                                       if listakeyword.count(key.lower()) > 0:
+ #                                           logging.info(" [*] Tag: " + bcolors.OKGREEN +  key + bcolors.OKBLUE + " found in " + str(tweet.user.profile_background_image_url) + bcolors.OKBLUE)
+ #                                           paroleprofilo.append(key)
+
+                            if len(tweet.entities['urls']) > 0:
+                                urljson = json.dumps(str(tweet.entities['urls'][0]))
+                                urlparsed = str(json.loads(urljson))
+                                strsearch = "expanded_url"
+                                urlindex = urlparsed.index(strsearch)
+                                urlfinestringa = urlparsed.index("', u'display_url")
+                                expandedurl = urlparsed[(urlindex+17):urlfinestringa]
+
+                                if expandedurl[:-4] == ".jpg" or expandedurl[:-4] == ".gif" or expandedurl[:-4] == ".png" or expandedurl[:-5] == ".jpeg":
+                                    isimage = True
+                                else:
+                                    isimage = False
+
+                                logging.warning(bcolors.HEADER + " [*] Expanded Media URL:" + bcolors.OKGREEN + expandedurl + bcolors.OKBLUE)
+
+                                client = textrazor.TextRazor(extractors=["entities", "topics"])
+                                response = client.analyze_url(expandedurl)
+
+                                try:
+                                    logging.warning(" [*] Semantic Analysis in Progress...")
+                                    for entity in response.entities():
+                                        if entity.confidence_score > 3:
+                                            logging.warning(" [*] ID: " + bcolors.OKGREEN + entity.id + bcolors.OKBLUE)
+                                            logging.warning(" [*] Confidence Score: " + bcolors.OKGREEN + str(
+                                                entity.confidence_score) + bcolors.OKBLUE)
+
+                                except:
+                                    raise
+
+                                if deep and isimage:
+                                    logging.warning(" [*] Media Image Analysis in progress...")
+                                    imaggatagjson = requests.get('https://api.imagga.com/v1/tagging?url=' + expandedurl, auth=(configuration.imaggakey, configuration.imaggasecred))
                                     imaggatagparsed = json.loads(imaggatagjson.text)
-
                                     for elencotag in imaggatagparsed['results']:
                                         for tags in elencotag['tags']:
                                             key = tags['tag']
                                             if listakeyword.count(key.lower()) > 0:
-                                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tag: " + bcolors.OKGREEN +  key + bcolors.OKBLUE + " found in " + str(tweet.user.profile_background_image_url))
-                                                paroleprofilo.append(key)
+                                               logging.warning(bcolors.HEADER + " [*] Tag: " + bcolors.OKGREEN +  key + bcolors.OKBLUE + " found in " + expandedurl + bcolors.OKBLUE)
+                                               paroleurl.append(key)
+                                else:
+                                    logging.warning(" [*] Attached URL is not an image. Skipping Image Analysis")
 
-                                if len(tweet.entities['urls']) > 0:
-                                    urljson = json.dumps(str(tweet.entities['urls'][0]))
-                                    urlparsed = str(json.loads(urljson))
-                                    strsearch = "expanded_url"
-                                    urlindex = urlparsed.index(strsearch)
-                                    urlfinestringa = urlparsed.index("', u'display_url")
-                                    expandedurl = urlparsed[(urlindex+17):urlfinestringa]
-                                    if expandedurl[:-4] == ".jpg" or expandedurl[:-4] == ".gif" or expandedurl[:-4] == ".png" or expandedurl[:-5] == ".jpeg":
-                                        isimage = True
-                                    else:
-                                        isimage = False
-
-                                    print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Expanded Media URL:" + bcolors.OKGREEN + expandedurl)
-                                    if deep and isimage:
-                                        imaggatagjson = requests.get('https://api.imagga.com/v1/tagging?url=' + expandedurl, auth=(configuration.imaggakey, configuration.imaggasecred))
-                                        imaggatagparsed = json.loads(imaggatagjson.text)
-                                        for elencotag in imaggatagparsed['results']:
-                                            for tags in elencotag['tags']:
-                                                key = tags['tag']
-                                                if listakeyword.count(key.lower()) > 0:
-                                                    print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Tag: " + bcolors.OKGREEN +  key + bcolors.OKBLUE + " found in " + expandedurl)
-                                                    paroleurl.append(key)
-                                try:
-                                    print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Source : " + bcolors.OKGREEN + str(tweet.source))
-                                except:
-                                    print bcolors.WARNING + str(datetime.datetime.utcnow()) + " [*] Could not retrieve Source"
-                                print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] GPS Coords: " + bcolors.OKGREEN + str(tweet.coordinates))
+                                logging.warning(bcolors.HEADER + " [*] GPS Coords: " + bcolors.OKGREEN + str(tweet.coordinates) + bcolors.OKBLUE)
                                 userlocation = tweet.user.location.encode('utf8')
                                 try:
-                                    print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] User Location: " + bcolors.OKGREEN + str(userlocation))
+                                    logging.warning(bcolors.HEADER + " [*] User Location: " + bcolors.OKGREEN + str(userlocation) + bcolors.OKBLUE)
                                 except:
-                                    print bcolors.WARNING + str(datetime.datetime.utcnow()) + " [*] Could not retrieve User Location"
+                                    logging.warning(" [*] Could not retrieve User Location")
                                     continue
 
-                                if dologging and userid == False:
-                                    out_file.write('------------------------------------------------------------------------------------------\n')
-                                    if notweet == False and userid == False:
-                                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] ' + tweet.text.encode('utf8') + '\n')
-                                        if yandex and str(translatedtweetparsed['code']) == "200":
-                                            out_file.write(str(datetime.datetime.utcnow()) + ' [*] ' + str(translatedtweetparsed['text']))
-
-                                    if userid == False:
-                                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user id: ' + str(tweet.user.id) + '\n')
-                                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] Originating user screen name: ' + str(tweet.user.screen_name) + '\n')
-                                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] Followers: ' + bcolors.OKGREEN + str(tweet.user.followers_count) + '\n')
-                                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] Tweet Created At: ' + bcolors.OKGREEN + str(tweet.created_at) + '\n')
-                                        out_file.write(str(datetime.datetime.utcnow()) + ' [*] Retweet Count: ' + bcolors.OKGREEN + str(tweet.retweet_count) + '\n')
-                                        try:
-                                            out_file.write(str(datetime.datetime.utcnow()) + ' [*] Source: ' + bcolors.OKGREEN + str(tweet.source) + '\n')
-                                        except:
-                                            continue
-                                        try:
-                                            out_file.write(str(datetime.datetime.utcnow()) + ' [*] User Location: ' + bcolors.OKGREEN + str(userlocation) + '\n')
-                                        except:
-                                            continue
-
-                            if dologging and userid:
-                                out_file.write("https://twitter.com/intent/user?user_id=" + str(tweet.user.id) + '\n')
+                            logging.warning(bcolors.HEADER + " [*] Direct Link: " + bcolors.OKGREEN + "https://twitter.com/intent/user?user_id=" + str(tweet.user.id) + bcolors.OKBLUE)
                             if follow:
                                 api.create_friendship(id=tweet.user.id)
-                                if verbose:
-                                    print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + " [*] Just followed User: " + bcolors.OKGREEN + tweet.user.screen_name)
-                                if dologging and userid == False:
-                                    out_file.write(str(datetime.datetime.utcnow()) + ' [*] Just followed User: ' + str(tweet.user.screen_name) + '\n')
+                                logging.warning(bcolors.HEADER + " [*] Just followed User: " + bcolors.OKGREEN + tweet.user.screen_name + bcolors.OKBLUE)
                             if block:
                                 api.create.block(id=tweet.user.id)
-                                if dologging and userid == False:
-                                    out_file.write(str(datetime.datetime.utcnow()) + ' [*] Blocked User: ' + str(tweet.user.screen_name) + '\n')
-                                if verbose:
-                                    print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + ' [*] Blocked User: ' + bcolors.OKGREEN + tweet.user.screen_name)
+                                logging.warning(bcolors.HEADER + ' [*] Blocked User: ' + bcolors.OKGREEN + tweet.user.screen_name + bcolors.OKBLUE)
                             if report:
                                 api.report_spam(id=tweet.user.id)
-                                if verbose:
-                                    print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + ' [*] Reported spam. User: ' + bcolors.OKGREEN + tweet.user.screen_name)
-                                if dologging and userid == False:
-                                    out_file.write(str(datetime.datetime.utcnow()) + ' [*] Reported spam. User: ' + str(tweet.user.screen_name) + '\n')
-                    if dologging:
-                        out_file.close()
+                                logging.warning(bcolors.HEADER + ' [*] Reported spam. User: ' + bcolors.OKGREEN + tweet.user.screen_name + bcolors.OKBLUE)
+
                 except KeyError:
-                        print bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] Key Error Occurred"
+                        logging.critical(bcolors.FAIL + " [*] Key Error Occurred" + bcolors.OKBLUE)
                         continue
                 except:
-                    print (bcolors.FAIL + str(datetime.datetime.utcnow()) + " [*] ERROR: Failed to establish a new connection.")
-                    print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + bcolors.OKGREEN + " [*] Sleeping 10 seconds and then i will retry.")
-                    #time.sleep(10)
-                    raise
+                    logging.critical(bcolors.FAIL + " [*] ERROR: Failed to establish a new connection." + bcolors.OKBLUE)
+                    logging.critical(bcolors.FAIL + " [*] Sleeping 10 seconds and then i will retry." + bcolors.OKBLUE)
+                    time.sleep(10)
+                    continue
                 else:
                     if trovatototal == 0:
-                        print (bcolors.OKBLUE + str(datetime.datetime.utcnow()) + bcolors.WARNING + " [*] No New tweets matching selected criteria")
+                        logging.warning(bcolors.HEADER + " [*] No New tweets matching selected criteria" + bcolors.OKBLUE)
 
 
     except KeyboardInterrupt:
-        print bcolors.HEADER + "Interrupted from keyboard. I Hope you enjoyed using Twitint!"
+        logging.warning(bcolors.HEADER + "Interrupted from keyboard. I Hope you enjoyed using Twitint!" + bcolors.OKBLUE)
         sys.exit()
 
 if __name__ == "__main__":
