@@ -232,6 +232,7 @@ def main():
                 print
         if deep:
             print bcolors.BOLD + '*** Image Categorization and tagging Powered by Imagga - http://www.imagga.com ***' + bcolors.ENDC + bcolors.OKBLUE
+            print 
 #            print
 #            print "##### DEEP ANALYSIS REQUIRES MANUAL INPUT #####"
 #            w = raw_input("Insert keyword to look for: ")
@@ -395,7 +396,7 @@ def main():
                                         key = tags['tag']
                                         confidence = tags['confidence']
                                         if confidence > 30:
-                                            logging.warning(bcolors.HEADER + " [*] Profile Image Tag Found: " + bcolors.OKGREEN + key)
+                                            logging.warning(bcolors.HEADER + " [*] Profile Image Tag Found: " + bcolors.OKGREEN + key + bcolors.OKBLUE)
                                             logging.warning(bcolors.HEADER + " [*] Confidence: " + bcolors.OKGREEN + str(confidence))
  #                                       if listakeyword.count(key.lower()) > 0:
  #                                           logging.info(" [*] Tag: " + bcolors.OKGREEN +  key + bcolors.OKBLUE + " found in " + str(tweet.user.profile_background_image_url) + bcolors.OKBLUE)
@@ -465,10 +466,9 @@ def main():
                 except KeyError:
                         logging.critical(bcolors.FAIL + " [*] Key Error Occurred" + bcolors.OKBLUE)
                         continue
-                except:
-                    logging.critical(bcolors.FAIL + " [*] ERROR: Failed to establish a new connection." + bcolors.OKBLUE)
-                    logging.critical(bcolors.FAIL + " [*] Sleeping 10 seconds and then i will retry." + bcolors.OKBLUE)
-                    time.sleep(10)
+                except ex:
+                    logging.critical(bcolors.FAIL + " [*] Internal Error Occurred: "+ ex + bcolors.OKBLUE)
+                    time.sleep(1)
                     continue
                 else:
                     if trovatototal == 0:
