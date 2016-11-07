@@ -467,7 +467,7 @@ def main():
                         logging.critical(bcolors.FAIL + " [*] Key Error Occurred" + bcolors.OKBLUE)
                         continue
                 except:
-                    logging.critical(bcolors.FAIL + " [*] Internal Error Occurred: "+ ex + bcolors.OKBLUE)
+                    logging.critical(bcolors.FAIL + " [*] Internal Error Occurred: "+ bcolors.OKBLUE)
                     time.sleep(1)
                     continue
                 else:
