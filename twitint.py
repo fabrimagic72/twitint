@@ -216,17 +216,22 @@ def main():
         print
 
 
-        logging.warning(bcolors.HEADER + "[*] Consumer Key = " + bcolors.OKGREEN + configuration.consumer_key + bcolors.OKBLUE)
-        logging.warning(bcolors.HEADER + "[*] Consumer Secret = " + bcolors.OKGREEN + configuration.consumer_secret + bcolors.OKBLUE)
-        logging.warning(bcolors.HEADER + "[*] Access Token = " + bcolors.OKGREEN + configuration.access_token + bcolors.OKBLUE)
-        logging.warning(bcolors.HEADER + "[*] Access Token Secret = " + bcolors.OKGREEN + configuration.access_token_secret + bcolors.OKBLUE)
-
+        logging.warning(bcolors.HEADER + "[*] Twitter Consumer Key = " + bcolors.OKGREEN + configuration.consumer_key + bcolors.OKBLUE)
+        logging.warning(bcolors.HEADER + "[*] Twitter Consumer Secret = " + bcolors.OKGREEN + configuration.consumer_secret + bcolors.OKBLUE)
+        logging.warning(bcolors.HEADER + "[*] Twitter Access Token = " + bcolors.OKGREEN + configuration.access_token + bcolors.OKBLUE)
+        logging.warning(bcolors.HEADER + "[*] Twitter Access Token Secret = " + bcolors.OKGREEN + configuration.access_token_secret + bcolors.OKBLUE)
+        logging.warning(
+            bcolors.HEADER + "[*] Imagga API Key = " + bcolors.OKGREEN + configuration.imaggakey + bcolors.OKBLUE)
+        logging.warning(
+            bcolors.HEADER + "[*] Imagga Api Secret = " + bcolors.OKGREEN + configuration.imaggasecred + bcolors.OKBLUE)
+        logging.warning(
+            bcolors.HEADER + "[*] TextRazor Key = " + bcolors.OKGREEN + textrazor.api_key + bcolors.OKBLUE)
         print
         if yandex:
                 print bcolors.BOLD + '*** Translation Powered by Yandex.Translate -  http://translate.yandex.com ***' + bcolors.ENDC + bcolors.OKBLUE
                 print
-#        if deep:
-#            print bcolors.BOLD + '*** Image Categorization and tagging Powered by Imagga - http://www.imagga.com ***' + bcolors.ENDC + bcolors.OKBLUE
+        if deep:
+            print bcolors.BOLD + '*** Image Categorization and tagging Powered by Imagga - http://www.imagga.com ***' + bcolors.ENDC + bcolors.OKBLUE
 #            print
 #            print "##### DEEP ANALYSIS REQUIRES MANUAL INPUT #####"
 #            w = raw_input("Insert keyword to look for: ")
