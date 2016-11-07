@@ -225,15 +225,15 @@ def main():
         if yandex:
                 print bcolors.BOLD + '*** Translation Powered by Yandex.Translate -  http://translate.yandex.com ***' + bcolors.ENDC + bcolors.OKBLUE
                 print
-        if deep:
-            print bcolors.BOLD + '*** Image Categorization and tagging Powered by Imagga - http://www.imagga.com ***' + bcolors.ENDC + bcolors.OKBLUE
-            print
-            print "##### DEEP ANALYSIS REQUIRES MANUAL INPUT #####"
-            w = raw_input("Insert keyword to look for: ")
-            while w != "":
-                insert = w.lower()
-                listakeyword.append(insert)
-                w = raw_input("Insert keyword to look for: ")
+#        if deep:
+#            print bcolors.BOLD + '*** Image Categorization and tagging Powered by Imagga - http://www.imagga.com ***' + bcolors.ENDC + bcolors.OKBLUE
+#            print
+#            print "##### DEEP ANALYSIS REQUIRES MANUAL INPUT #####"
+#            w = raw_input("Insert keyword to look for: ")
+#            while w != "":
+#                insert = w.lower()
+#                listakeyword.append(insert)
+#                w = raw_input("Insert keyword to look for: ")
         logging.warning(bcolors.HEADER + " [*] Authenticating..." + bcolors.OKBLUE)
 
 
