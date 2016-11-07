@@ -232,7 +232,7 @@ def main():
                 print
         if deep:
             print bcolors.BOLD + '*** Image Categorization and tagging Powered by Imagga - http://www.imagga.com ***' + bcolors.ENDC + bcolors.OKBLUE
-            print 
+            print
 #            print
 #            print "##### DEEP ANALYSIS REQUIRES MANUAL INPUT #####"
 #            w = raw_input("Insert keyword to look for: ")
@@ -466,7 +466,7 @@ def main():
                 except KeyError:
                         logging.critical(bcolors.FAIL + " [*] Key Error Occurred" + bcolors.OKBLUE)
                         continue
-                except ex:
+                except:
                     logging.critical(bcolors.FAIL + " [*] Internal Error Occurred: "+ ex + bcolors.OKBLUE)
                     time.sleep(1)
                     continue
