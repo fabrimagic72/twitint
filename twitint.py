@@ -420,16 +420,17 @@ def main():
                                 client = textrazor.TextRazor(extractors=["entities", "topics"])
                                 response = client.analyze_url(expandedurl)
 
-                                try:
-                                    logging.warning(" [*] Semantic Analysis in Progress...")
-                                    for entity in response.entities():
-                                        if entity.confidence_score > 3:
-                                            logging.warning(" [*] ID: " + bcolors.OKGREEN + entity.id + bcolors.OKBLUE)
-                                            logging.warning(" [*] Confidence Score: " + bcolors.OKGREEN + str(
-                                                entity.confidence_score) + bcolors.OKBLUE)
+                                if deep:
+                                    try:
+                                        logging.warning(" [*] Semantic Analysis in Progress...")
+                                        for entity in response.entities():
+                                            if entity.confidence_score > 3:
+                                                logging.warning(" [*] ID: " + bcolors.OKGREEN + entity.id + bcolors.OKBLUE)
+                                                logging.warning(" [*] Confidence Score: " + bcolors.OKGREEN + str(
+                                                    entity.confidence_score) + bcolors.OKBLUE)
 
-                                except:
-                                    raise
+                                    except:
+                                        raise
 
                                 if deep and isimage:
                                     logging.warning(" [*] Media Image Analysis in progress...")
@@ -441,7 +442,7 @@ def main():
                                             if listakeyword.count(key.lower()) > 0:
                                                logging.warning(bcolors.HEADER + " [*] Tag: " + bcolors.OKGREEN +  key + bcolors.OKBLUE + " found in " + expandedurl + bcolors.OKBLUE)
                                                paroleurl.append(key)
-                                else:
+                                elif deep and not isimage:
                                     logging.warning(" [*] Attached URL is not an image. Skipping Image Analysis")
 
                                 logging.warning(bcolors.HEADER + " [*] GPS Coords: " + bcolors.OKGREEN + str(tweet.coordinates) + bcolors.OKBLUE)
