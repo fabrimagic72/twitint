@@ -1,20 +1,4 @@
-In order to use all features you need the following integrations:
-
-Tweepy:
-to install tweepy type:
-pip install tweepy
-  
-Textrazor:
-to install textraroz type
-pip install textrazot
-
-You also need API keys from the following websites:
-- twitter.com
-- imagga.com
-- yandex translate
-- textrazor.com
-
-All API keys can be requested for free.
-Include all API keys in configuration file.
+tweepy
+textrazor
 
   
