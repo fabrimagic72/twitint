@@ -1,3 +1,4 @@
+import re
 import getopt
 import sys
 import tweepy
@@ -9,7 +10,14 @@ import unicodedata
 import requests
 import logging
 import textrazor
+import requests
+import pymongo
+import unicodedata
+from pymongo import MongoClient
 
+client = MongoClient()
+client = MongoClient('localhost', 27017)
+db = client.twitint
 
 global ricerca
 global TweetId
@@ -21,11 +29,10 @@ global location
 global keyword
 global paroleprofilo
 global paroleurl
-
+global urlFound
 
 Config = ConfigParser.ConfigParser()
-version = "0.94b"
-
+version = "0.95b"
 
 class bcolors:
     HEADER = '\033[95m'
@@ -45,7 +52,6 @@ class configuration:
     translateapikey = ""
     imaggakey = ""
     imaggasecret = ""
-
 
 def PrintRateLimit():
     ratelimit_json = ""
@@ -107,7 +113,8 @@ def usage():
     sys.exit()
 
 def main():
-
+   
+    urlFound = ""
     TweetId=[]
     TweetText=[]
     LastTweetId=0
@@ -233,13 +240,6 @@ def main():
         if deep:
             print bcolors.BOLD + '*** Image Categorization and tagging Powered by Imagga - http://www.imagga.com ***' + bcolors.ENDC + bcolors.OKBLUE
             print
-#            print
-#            print "##### DEEP ANALYSIS REQUIRES MANUAL INPUT #####"
-#            w = raw_input("Insert keyword to look for: ")
-#            while w != "":
-#                insert = w.lower()
-#                listakeyword.append(insert)
-#                w = raw_input("Insert keyword to look for: ")
         logging.warning(bcolors.HEADER + " [*] Authenticating..." + bcolors.OKBLUE)
 
 
@@ -364,7 +364,7 @@ def main():
                             logging.warning(bcolors.HEADER + " [*] Tweet Text: " + bcolors.OKGREEN + tweet.text + bcolors.OKBLUE)
                             if yandex:
                                 yandexurl = 'https://translate.yandex.net/api/v1.5/tr.json/detect?key=' + str(configuration.translateapikey) + '&text=' + tweet.text.encode('utf8')
-                                detectedlanguagejson = requests.get(yandexurl)
+                                detectedlanguagejson = requests.get(yandexurlstre(tweet.text))
                                 detectedlanguageparsed = json.loads(str(detectedlanguagejson.text))
                                 logging.warning(bcolors.HEADER + " [*] Detected Language: " + bcolors.OKGREEN + str(detectedlanguageparsed['lang'] + bcolors.OKBLUE))
                                 yandextransurl = 'https://translate.yandex.net/api/v1.5/tr.json/translate?key=' + str(configuration.translateapikey) + '&text=' + tweet.text.encode('utf8') + '&lang=' + str(destlang)
@@ -374,6 +374,11 @@ def main():
                                     logging.warning(bcolors.HEADER + " [*] Translated Tweet: " + bcolors.OKGREEN + str(translatedtweetparsed['text'])[3:-2] + bcolors.OKBLUE)
                                 else:
                                     logging.critical(bcolors.FAIL + " [*] Unable to translate this tweet - Error Code: " + str(translatedtweetparsed['code']) + bcolors.OKBLUE)
+			    urlFound=""
+			    try:
+			    	urlFound = re.search("(?P<url>https?://[^\s]+)", tweet.text).group("url")
+			    except:
+				logging.warning(bcolors.HEADER + " [*] No URL Found inside Tweet Text" )
                             logging.warning(bcolors.HEADER + " [*] User Id: " + bcolors.OKGREEN + str(tweet.user.id) + bcolors.OKBLUE)
                             logging.warning(bcolors.HEADER + " [*] User Screen Name: " + bcolors.OKGREEN + tweet.user.screen_name + bcolors.OKBLUE)
                             logging.warning(bcolors.HEADER + " [*] User Name: " + bcolors.OKGREEN + tweet.user.name + bcolors.OKBLUE)
@@ -381,11 +386,16 @@ def main():
                             logging.warning(bcolors.HEADER + " [*] Tweet Created At : " + bcolors.OKGREEN + str(tweet.created_at) + bcolors.OKBLUE)
                             logging.warning(bcolors.HEADER + " [*] Retweet Count : " + bcolors.OKGREEN + str(tweet.retweet_count) + bcolors.OKBLUE)
                             logging.warning(bcolors.HEADER + " [*] Geo Enabled : " + bcolors.OKGREEN + str(tweet.user.geo_enabled) + bcolors.OKBLUE)
+		  	    database = { "keyword" : ricerca, "text" : tweet.text, "user" : str(tweet.user.id), "name" : tweet.user.screen_name, "time" : str(tweet.created_at)}
+		            if urlFound !="":
+			    	logging.warning(bcolors.HEADER + " [*] URL Found : " + bcolors.OKGREEN + urlFound  + bcolors.OKBLUE)
+				database["url"] = urlFound
                             try:
-                                logging.warning(bcolors.HEADER + " [*] Source : " + bcolors.OKGREEN + str(
-                                    tweet.source) + bcolors.OKBLUE)
+                                logging.warning(bcolors.HEADER + " [*] Source : " + bcolors.OKGREEN + str(tweet.source) + bcolors.OKBLUE)
                             except:
                                 logging.warning(" [*] Could not retrieve Source")
+			    post_id = db.tweets.insert_one(database)
+			    database = {}
                             if deep:
                                 imaggatagjson = requests.get('https://api.imagga.com/v1/tagging?url=' + str(tweet.user.profile_background_image_url), auth=(configuration.imaggakey, configuration.imaggasecred))
                                 imaggatagparsed = json.loads(imaggatagjson.text)
