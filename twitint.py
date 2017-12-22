@@ -233,6 +233,8 @@ def main():
             bcolors.HEADER + "[*] Imagga Api Secret = " + bcolors.OKGREEN + configuration.imaggasecred + bcolors.OKBLUE)
         logging.warning(
             bcolors.HEADER + "[*] TextRazor Key = " + bcolors.OKGREEN + textrazor.api_key + bcolors.OKBLUE)
+	logging.warning(
+            bcolors.HEADER + "[*] Yandex Translate Key = " + bcolors.OKGREEN + configuration.translateapikey + bcolors.OKBLUE)
         print
         if yandex:
                 print bcolors.BOLD + '*** Translation Powered by Yandex.Translate -  http://translate.yandex.com ***' + bcolors.ENDC + bcolors.OKBLUE
@@ -364,11 +366,11 @@ def main():
                             logging.warning(bcolors.HEADER + " [*] Tweet Text: " + bcolors.OKGREEN + tweet.text + bcolors.OKBLUE)
                             if yandex:
                                 yandexurl = 'https://translate.yandex.net/api/v1.5/tr.json/detect?key=' + str(configuration.translateapikey) + '&text=' + tweet.text.encode('utf8')
-                                detectedlanguagejson = requests.get(yandexurlstre(tweet.text))
-                                detectedlanguageparsed = json.loads(str(detectedlanguagejson.text))
+                                detectedlanguagejson = requests.post(yandexurl)
+                                detectedlanguageparsed = json.loads(detectedlanguagejson.text)
                                 logging.warning(bcolors.HEADER + " [*] Detected Language: " + bcolors.OKGREEN + str(detectedlanguageparsed['lang'] + bcolors.OKBLUE))
                                 yandextransurl = 'https://translate.yandex.net/api/v1.5/tr.json/translate?key=' + str(configuration.translateapikey) + '&text=' + tweet.text.encode('utf8') + '&lang=' + str(destlang)
-                                translatedtweetjson = requests.get(yandextransurl)
+                                translatedtweetjson = requests.post(yandextransurl)
                                 translatedtweetparsed = json.loads(translatedtweetjson.text)
                                 if str(translatedtweetparsed['code']) == "200":
                                     logging.warning(bcolors.HEADER + " [*] Translated Tweet: " + bcolors.OKGREEN + str(translatedtweetparsed['text'])[3:-2] + bcolors.OKBLUE)
@@ -386,7 +388,9 @@ def main():
                             logging.warning(bcolors.HEADER + " [*] Tweet Created At : " + bcolors.OKGREEN + str(tweet.created_at) + bcolors.OKBLUE)
                             logging.warning(bcolors.HEADER + " [*] Retweet Count : " + bcolors.OKGREEN + str(tweet.retweet_count) + bcolors.OKBLUE)
                             logging.warning(bcolors.HEADER + " [*] Geo Enabled : " + bcolors.OKGREEN + str(tweet.user.geo_enabled) + bcolors.OKBLUE)
-		  	    database = { "keyword" : ricerca, "text" : tweet.text, "user" : str(tweet.user.id), "name" : tweet.user.screen_name, "time" : str(tweet.created_at)}
+		  	    database = { "keyword" : ricerca, "text" : tweet.text.encode('utf8'), "user" : unicode(tweet.user.id), "name" : tweet.user.screen_name.encode('utf8'), "time" : str(tweet.created_at)}
+			    if yandex:
+				database["translated"] = str(translatedtweetparsed['text'])[3:-2]
 		            if urlFound !="":
 			    	logging.warning(bcolors.HEADER + " [*] URL Found : " + bcolors.OKGREEN + urlFound  + bcolors.OKBLUE)
 				database["url"] = urlFound
@@ -394,7 +398,10 @@ def main():
                                 logging.warning(bcolors.HEADER + " [*] Source : " + bcolors.OKGREEN + str(tweet.source) + bcolors.OKBLUE)
                             except:
                                 logging.warning(" [*] Could not retrieve Source")
-			    post_id = db.tweets.insert_one(database)
+			    try:
+			    	post_id = db.tweets.insert_one(database)
+			    except:
+				logging.warning(" [*] Could not insert tweet into database")
 			    database = {}
                             if deep:
                                 imaggatagjson = requests.get('https://api.imagga.com/v1/tagging?url=' + str(tweet.user.profile_background_image_url), auth=(configuration.imaggakey, configuration.imaggasecred))
